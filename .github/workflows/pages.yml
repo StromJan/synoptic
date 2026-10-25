@@ -1,0 +1,64 @@
+name: Synoptic overview
+
+on:
+  schedule:
+    # UTC. Twice a day, after the 00 and 12 UTC runs are complete to +168 h.
+    # Retrieve_ECMWF_OpenData.py always picks the newest complete run, so the
+    # exact time only affects how fresh the site is.
+    - cron: "23 9,21 * * *"
+  workflow_dispatch:          # "Run workflow" button in the Actions tab
+  push:
+    branches: [main]
+    paths: ["Scripts/**", "requirements.txt", ".github/workflows/pages.yml"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Cache coastlines and borders (Natural Earth)
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/cartopy
+          key: cartopy-naturalearth
+
+      - name: Install packages
+        run: pip install -r requirements.txt
+
+      - name: Download IFS forecast, DWD charts and meteogram
+        working-directory: Scripts
+        run: bash Retrieve_Forecast.bash
+
+      - name: Render maps and build the page
+        working-directory: Scripts
+        run: python build_site.py
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
