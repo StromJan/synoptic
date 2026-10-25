@@ -5,6 +5,13 @@
     python build_site.py --products ReTop     # just one product (quick check)
     python build_site.py --workers 2
 
+    python build_site.py --local              # reuse maps already in ../site, render only missing ones
+    python build_site.py --local --redo ReTop # ...but re-render ReTop (e.g. after changing its style)
+
+--local is for working on the page or a single map without waiting for every
+map again. Maps are only reused if they were made from the same IFS run as the
+data in ../Data; after downloading a new run, everything is rendered again.
+
 Reads  ../Data/pl_*.grib, ../Data/sfc.grib, ../Data/DWD_analysis/*.png,
        ../Data/meteograms/helsinki_meteogram.png
 Writes ../site/index.html and ../site/img/...
@@ -431,12 +438,27 @@ def _render_job(job):
     return key
 
 
-def render_all(keys, n_steps, workers, data):
+def frame_path(key, i):
+    return SITE_DIR / "img" / key / f"{i:03d}.png"
+
+
+def has_frame(key, i):
+    p = frame_path(key, i)
+    return p.exists() and p.stat().st_size > 0      # empty file = interrupted save
+
+
+def render_all(keys, n_steps, workers, data, skip_existing=False):
     global _DATA
     jobs = []
     for key in keys:
         (SITE_DIR / "img" / key).mkdir(parents=True, exist_ok=True)
-        jobs += [(key, i, SITE_DIR / "img" / key / f"{i:03d}.png") for i in range(n_steps)]
+        jobs += [(key, i, frame_path(key, i)) for i in range(n_steps)
+                 if not (skip_existing and has_frame(key, i))]
+
+    if skip_existing:
+        print(f"  reusing {len(keys) * n_steps - len(jobs)} existing maps, rendering {len(jobs)}")
+    if not jobs:
+        return
 
     # Render the first map here, before any workers exist. This downloads the
     # coastline/border files once; if every worker starts at the same time on an
@@ -487,13 +509,15 @@ def extra_sections():
 
     src = copy_image(DATA_DIR / "meteograms/helsinki_meteogram.png", "img/meteogram_helsinki.png")
     if src:
-        sections.append(dict(id="meteogram", kind="image", title="Ensemble forecast for Helsinki", src=src))
+        sections.append(dict(id="meteogram", kind="image", title="Ensemble forecast for Helsinki",
+                             src=src, wide=True))
     return sections
 
 
 def write_page(keys, data):
     run = pd.Timestamp(data["forecast_reference_time"].values)
-    version = run.strftime("%Y%m%d%H")          # cache-buster: new URLs for every run
+    # cache-buster: new image URLs for every build, so browsers never show old maps
+    version = f"{run:%Y%m%d%H}-{int(time.time())}"
 
     labels = []
     for i in range(data.sizes["step"]):
@@ -530,20 +554,44 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--products", nargs="+", choices=list(RENDERERS), default=list(RENDERERS))
     ap.add_argument("--workers", type=int, default=os.cpu_count())
+    ap.add_argument("--local", action="store_true",
+                    help="reuse maps already in ../site (same IFS run only), render only missing ones")
+    ap.add_argument("--redo", nargs="+", choices=list(RENDERERS), default=[], metavar="PRODUCT",
+                    help="with --local: re-render these products anyway")
     args = ap.parse_args()
+    if args.redo and not args.local:
+        ap.error("--redo only makes sense with --local (without it, everything is rendered anyway)")
 
     data = load_data()
     n_steps = data.sizes["step"]
     run = pd.Timestamp(data["forecast_reference_time"].values)
+    run_id = f"{run:%Y%m%d%H}"
     print(f"IFS run {run:%Y-%m-%d %H} UTC, {n_steps} steps, "
           f"{len(args.products)} products, {args.workers} workers")
 
-    if SITE_DIR.exists():                       # start clean so no stale frames survive
-        shutil.rmtree(SITE_DIR)
-    SITE_DIR.mkdir(parents=True)
+    # run.txt records which IFS run the maps in site/img were made from
+    stamp = SITE_DIR / "img" / "run.txt"
+    reuse = args.local and stamp.exists() and stamp.read_text().strip() == run_id
+    if args.local and not reuse:
+        print("  --local: no maps from this IFS run to reuse, rendering everything")
 
-    render_all(args.products, n_steps, args.workers, data)
-    write_page(args.products, data)
+    if reuse:
+        for key in args.redo:                   # throw away the products to redo
+            shutil.rmtree(SITE_DIR / "img" / key, ignore_errors=True)
+    else:
+        if SITE_DIR.exists():                   # start clean so no stale frames survive
+            shutil.rmtree(SITE_DIR)
+        (SITE_DIR / "img").mkdir(parents=True)
+        stamp.write_text(run_id)
+
+    to_render = list(dict.fromkeys(args.products + args.redo))
+    render_all(to_render, n_steps, args.workers, data, skip_existing=reuse)
+
+    # Page shows every product whose maps are all there: with --local that can
+    # include products rendered in an earlier build.
+    on_page = [k for k in RENDERERS
+               if k in to_render or (reuse and all(has_frame(k, i) for i in range(n_steps)))]
+    write_page(on_page, data)
     size = sum(f.stat().st_size for f in SITE_DIR.rglob("*") if f.is_file())
     print(f"Site written to {SITE_DIR.resolve()} ({size / 1e6:.0f} MB)")
 

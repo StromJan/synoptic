@@ -24,34 +24,43 @@
     position: sticky; top: 0; z-index: 10; background: var(--card);
     border-bottom: 1px solid var(--line); padding: 10px 16px;
   }
-  .bar { max-width: 1200px; margin: auto; display: flex; flex-wrap: wrap;
+  .bar { max-width: 2300px; margin: auto; display: flex; flex-wrap: wrap;
          align-items: baseline; gap: 6px 18px; }
   h1 { font-size: 18px; margin: 0; }
   .meta { color: var(--muted); font-size: 13px; }
   .sync { margin-left: auto; font-size: 13px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
-  nav { max-width: 1200px; margin: 6px auto 0; display: flex; gap: 4px 14px; flex-wrap: wrap; font-size: 13px; }
+  nav { max-width: 2300px; margin: 6px auto 0; display: flex; gap: 4px 14px; flex-wrap: wrap; font-size: 13px; }
   nav a { color: var(--accent); text-decoration: none; }
   nav a:hover { text-decoration: underline; }
-  main { max-width: 1200px; margin: auto; padding: 16px; }
+  /* Grid: as many ~500 px+ columns as fit -> 1 on phones, 2 on laptops, 3 on big screens */
+  main {
+    max-width: 2300px; margin: auto; padding: 16px;
+    display: grid; gap: 16px; align-items: start;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 500px), 1fr));
+  }
   section {
     background: var(--card); border: 1px solid var(--line); border-radius: 8px;
-    padding: 14px 16px 16px; margin-bottom: 18px; scroll-margin-top: 90px;
+    padding: 12px 14px 12px; scroll-margin-top: 90px; min-width: 0;
   }
+  section.wide { grid-column: 1 / -1; }          /* e.g. the meteogram spans the full row */
   h2 { font-size: 17px; margin: 0 0 2px; }
-  .desc { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
-  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .desc { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+  /* controls sit under the map, so a thumb on the slider doesn't cover it */
+  .controls { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   .controls button {
     width: 36px; height: 30px; border: 1px solid var(--line); border-radius: 6px;
     background: var(--btn); color: var(--text); cursor: pointer; font-size: 13px;
   }
-  .controls input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
-  .label { min-width: 210px; font-variant-numeric: tabular-nums; font-size: 14px; }
+  .controls input[type=range] { flex: 1; min-width: 140px; height: 28px; accent-color: var(--accent); }
+  .label { width: 100%; text-align: center; font-variant-numeric: tabular-nums; font-size: 14px; }
   .frame { display: block; max-width: 100%; height: auto; margin: auto; border-radius: 4px; background: #fff; }
   section.active { outline: 2px solid var(--accent); outline-offset: -1px; }
-  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 16px 24px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 16px 24px;
+           max-width: 900px; margin: auto; }
+  footer p { margin: 0 0 6px; }
+  footer a { color: var(--accent); }
   @media (max-width: 600px) {
     header { position: static; }                 /* don't let the header eat a phone screen */
-    .label { min-width: 0; width: 100%; }
     .sync { margin-left: 0; }
   }
 </style>
@@ -67,8 +76,18 @@
 </header>
 <main id="main"></main>
 <footer>
-  Forecast data: ECMWF IFS open data (CC-BY-4.0). Charts: DWD, ECMWF.
-  Use &larr; &rarr; to step through the highlighted map, space to play.
+  <p>
+    Maps are derived from ECMWF IFS open forecast data,
+    &copy; European Centre for Medium-Range Weather Forecasts (ECMWF),
+    licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+    The data were cropped and processed (e.g. thickness, &theta;<sub>e</sub>, frontogenesis) for these maps.
+    ECMWF does not accept any liability for errors or omissions in the data or for any use of it.
+  </p>
+  <p>
+    Meteogram: &copy; ECMWF, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+    Analysis and surface forecast charts: Quelle: Deutscher Wetterdienst (DWD).
+  </p>
+  <p>Not an official forecast. &nbsp;Use &larr; &rarr; to step through the highlighted map, space to play.</p>
 </footer>
 
 <script>
@@ -88,14 +107,14 @@ function setActive(v) {
 
 function makeViewer(s, el) {
   el.insertAdjacentHTML("beforeend", `
+    <img class="frame" alt="${s.title}">
     <div class="controls">
       <button title="Previous" data-a="prev">&#9664;</button>
       <button title="Play / pause" data-a="play">&#9654;</button>
       <button title="Next" data-a="next">&#9654;&#9654;</button>
       <input type="range" min="0" max="${s.frames.length - 1}" value="0" aria-label="Forecast step">
       <span class="label"></span>
-    </div>
-    <img class="frame" alt="${s.title}">`);
+    </div>`);
   const slider = el.querySelector("input");
   const label = el.querySelector(".label");
   const img = el.querySelector("img");
@@ -136,6 +155,7 @@ const main = document.getElementById("main");
 for (const s of M.sections) {
   const el = document.createElement("section");
   el.id = s.id;
+  if (s.wide) el.classList.add("wide");
   el.innerHTML = `<h2>${s.title}</h2>` + (s.desc ? `<p class="desc">${s.desc}</p>` : "");
   main.append(el);
   nav.insertAdjacentHTML("beforeend", `<a href="#${s.id}">${s.title.split(":")[0]}</a>`);

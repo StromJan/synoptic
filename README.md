@@ -25,6 +25,16 @@ python build_site.py              # or: --products ReTop --workers 4
 python -m http.server -d ../site  # open http://localhost:8000
 ```
 
+While working on the page or one map, skip re-rendering what's already there:
+
+```bash
+python build_site.py --local              # reuse existing maps, render only missing ones
+python build_site.py --local --redo ReTop # ...and re-render ReTop after changing it
+```
+
+Maps are only reused if they come from the same IFS run as `Data/`; after a new
+download everything is rendered again.
+
 ## Add a new map
 
 1. Write `render_MyMap(frame, stamp, fc_step)` in `build_site.py` (try it in the notebook first).
