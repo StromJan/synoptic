@@ -68,7 +68,11 @@ def open_grib(path, pressure_levels=False):
         ds = ekd.from_source("file", str(path)).to_xarray(add_valid_time_coord=True)
         if "forecast_reference_time" in ds.dims:     # several runs in the file: keep the latest
             ds = ds.isel(forecast_reference_time=-1)
-    return ds
+
+    # Crop first, then read into memory as float32. Loading the global fields in
+    # float64 needs ~5 GB per process at 0.25 deg and gets the GitHub runner killed.
+    ds = crop(fix_units(ds)).load()
+    return ds.astype("float32", keep_attrs=True)
 
 
 def fix_units(ds):
@@ -84,10 +88,9 @@ def load_data():
     pl_files = sorted(glob.glob(str(DATA_DIR / "pl_*.grib")))
     if not pl_files:
         raise FileNotFoundError(f"No pl_*.grib files in {DATA_DIR.resolve()}")
-    ds = xr.merge([open_grib(f, pressure_levels=True) for f in pl_files]
-                  + [open_grib(DATA_DIR / "sfc.grib")],
-                  compat="override", join="outer")
-    return crop(fix_units(ds))
+    return xr.merge([open_grib(f, pressure_levels=True) for f in pl_files]
+                    + [open_grib(DATA_DIR / "sfc.grib")],
+                    compat="override", join="outer")
 
 
 def crop(ds):
