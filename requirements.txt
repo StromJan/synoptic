@@ -1,0 +1,13 @@
+# Packages for the GitHub Actions build. Versions are the ones the site was
+# tested with; bump them deliberately and check the page afterwards.
+earthkit-data==1.3.0
+earthkit-plots==1.0.4
+ecmwf-opendata==0.3.35
+eccodes==2.50.0
+metpy==1.7.1
+cmcrameri==1.10
+cartopy==0.26.0
+matplotlib==3.11.2
+xarray==2026.9.0
+pandas==3.0.5
+requests

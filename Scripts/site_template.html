@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synoptic overview</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d232b; --muted: #5d6875;
+    --line: #dde2e8; --accent: #1f6feb; --btn: #eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161b; --card: #1a2027; --text: #e6eaef; --muted: #9aa5b1;
+      --line: #2b333d; --accent: #58a6ff; --btn: #242c35;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; background: var(--card);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+  }
+  .bar { max-width: 1200px; margin: auto; display: flex; flex-wrap: wrap;
+         align-items: baseline; gap: 6px 18px; }
+  h1 { font-size: 18px; margin: 0; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .sync { margin-left: auto; font-size: 13px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  nav { max-width: 1200px; margin: 6px auto 0; display: flex; gap: 4px 14px; flex-wrap: wrap; font-size: 13px; }
+  nav a { color: var(--accent); text-decoration: none; }
+  nav a:hover { text-decoration: underline; }
+  main { max-width: 1200px; margin: auto; padding: 16px; }
+  section {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px 16px; margin-bottom: 18px; scroll-margin-top: 90px;
+  }
+  h2 { font-size: 17px; margin: 0 0 2px; }
+  .desc { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .controls button {
+    width: 36px; height: 30px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--btn); color: var(--text); cursor: pointer; font-size: 13px;
+  }
+  .controls input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
+  .label { min-width: 210px; font-variant-numeric: tabular-nums; font-size: 14px; }
+  .frame { display: block; max-width: 100%; height: auto; margin: auto; border-radius: 4px; background: #fff; }
+  section.active { outline: 2px solid var(--accent); outline-offset: -1px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 16px 24px; }
+  @media (max-width: 600px) {
+    header { position: static; }                 /* don't let the header eat a phone screen */
+    .label { min-width: 0; width: 100%; }
+    .sync { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>Synoptic overview</h1>
+    <span class="meta" id="meta"></span>
+    <label class="sync"><input type="checkbox" id="sync" checked> Link time steps</label>
+  </div>
+  <nav id="nav"></nav>
+</header>
+<main id="main"></main>
+<footer>
+  Forecast data: ECMWF IFS open data (CC-BY-4.0). Charts: DWD, ECMWF.
+  Use &larr; &rarr; to step through the highlighted map, space to play.
+</footer>
+
+<script>
+const M = __MANIFEST__;
+document.getElementById("meta").textContent =
+  `IFS run ${M.run} · ${M.domain} · built ${M.built}`;
+
+const syncBox = document.getElementById("sync");
+const viewers = [];
+let active = null;
+
+function setActive(v) {
+  if (active) active.el.classList.remove("active");
+  active = v;
+  if (v) v.el.classList.add("active");
+}
+
+function makeViewer(s, el) {
+  el.insertAdjacentHTML("beforeend", `
+    <div class="controls">
+      <button title="Previous" data-a="prev">&#9664;</button>
+      <button title="Play / pause" data-a="play">&#9654;</button>
+      <button title="Next" data-a="next">&#9654;&#9654;</button>
+      <input type="range" min="0" max="${s.frames.length - 1}" value="0" aria-label="Forecast step">
+      <span class="label"></span>
+    </div>
+    <img class="frame" alt="${s.title}">`);
+  const slider = el.querySelector("input");
+  const label = el.querySelector(".label");
+  const img = el.querySelector("img");
+  const playBtn = el.querySelector('[data-a="play"]');
+
+  const v = { el, s, i: 0, timer: null };
+  v.show = (i, fromSync = false) => {
+    const n = s.frames.length;
+    i = ((i % n) + n) % n;
+    v.i = i; slider.value = i;
+    img.src = s.frames[i];
+    label.textContent = s.labels[i];
+    if (!fromSync && syncBox.checked && s.group)
+      viewers.forEach(o => { if (o !== v && o.s.group === s.group) o.show(i, true); });
+  };
+  v.stop = () => { clearInterval(v.timer); v.timer = null; playBtn.innerHTML = "&#9654;"; };
+  v.toggle = () => {
+    if (v.timer) return v.stop();
+    playBtn.innerHTML = "&#10074;&#10074;";
+    v.timer = setInterval(() => v.show(v.i + 1), 450);
+  };
+
+  slider.addEventListener("input", () => v.show(+slider.value));
+  el.querySelector('[data-a="prev"]').onclick = () => v.show(v.i - 1);
+  el.querySelector('[data-a="next"]').onclick = () => v.show(v.i + 1);
+  playBtn.onclick = v.toggle;
+  el.addEventListener("pointerdown", () => setActive(v));
+  el.addEventListener("mouseenter", () => setActive(v));
+
+  v.preload = () => { if (!v.loaded) { v.loaded = true; s.frames.forEach(f => { new Image().src = f; }); } };
+  viewers.push(v);
+  v.show(0, true);
+  return v;
+}
+
+const nav = document.getElementById("nav");
+const main = document.getElementById("main");
+for (const s of M.sections) {
+  const el = document.createElement("section");
+  el.id = s.id;
+  el.innerHTML = `<h2>${s.title}</h2>` + (s.desc ? `<p class="desc">${s.desc}</p>` : "");
+  main.append(el);
+  nav.insertAdjacentHTML("beforeend", `<a href="#${s.id}">${s.title.split(":")[0]}</a>`);
+  if (s.kind === "viewer") makeViewer(s, el);
+  else el.insertAdjacentHTML("beforeend", `<img class="frame" loading="lazy" src="${s.src}" alt="${s.title}">`);
+}
+
+// fetch all frames of a viewer only once it is about to scroll into view
+const io = new IntersectionObserver(entries => entries.forEach(e => {
+  if (e.isIntersecting) viewers.find(v => v.el === e.target)?.preload();
+}), { rootMargin: "400px" });
+viewers.forEach(v => io.observe(v.el));
+if (viewers.length) setActive(viewers[0]);
+
+document.addEventListener("keydown", e => {
+  if (!active || e.target.closest("input:not([type=range]), textarea, button")) return;
+  if (e.key === "ArrowRight") { active.show(active.i + 1); e.preventDefault(); }
+  else if (e.key === "ArrowLeft") { active.show(active.i - 1); e.preventDefault(); }
+  else if (e.key === " ") { active.toggle(); e.preventDefault(); }
+});
+</script>
+</body>
+</html>
