@@ -36,7 +36,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.local/share/cartopy
-          key: cartopy-naturalearth
+          key: cartopy-naturalearth-v2
 
       - name: Install packages
         run: pip install -r requirements.txt

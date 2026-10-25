@@ -413,7 +413,8 @@ _DATA = None
 
 def _init_worker():
     global _DATA
-    _DATA = load_data()
+    if _DATA is None:          # on Linux workers inherit the parent's data; otherwise load it
+        _DATA = load_data()
 
 
 def _render_job(job):
@@ -430,15 +431,23 @@ def _render_job(job):
     return key
 
 
-def render_all(keys, n_steps, workers):
+def render_all(keys, n_steps, workers, data):
+    global _DATA
     jobs = []
     for key in keys:
         (SITE_DIR / "img" / key).mkdir(parents=True, exist_ok=True)
         jobs += [(key, i, SITE_DIR / "img" / key / f"{i:03d}.png") for i in range(n_steps)]
 
-    t0, done = time.time(), 0
+    # Render the first map here, before any workers exist. This downloads the
+    # coastline/border files once; if every worker starts at the same time on an
+    # empty cache, they download the same file together and read half-written copies.
+    t0 = time.time()
+    _DATA = data
+    _render_job(jobs[0])
+    done = 1
+
     with ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as pool:
-        for _ in pool.map(_render_job, jobs, chunksize=2):
+        for _ in pool.map(_render_job, jobs[1:], chunksize=2):
             done += 1
             if done % 10 == 0 or done == len(jobs):
                 print(f"  rendered {done}/{len(jobs)} maps ({time.time() - t0:.0f} s)", flush=True)
@@ -533,7 +542,7 @@ def main():
         shutil.rmtree(SITE_DIR)
     SITE_DIR.mkdir(parents=True)
 
-    render_all(args.products, n_steps, args.workers)
+    render_all(args.products, n_steps, args.workers, data)
     write_page(args.products, data)
     size = sum(f.stat().st_size for f in SITE_DIR.rglob("*") if f.is_file())
     print(f"Site written to {SITE_DIR.resolve()} ({size / 1e6:.0f} MB)")
