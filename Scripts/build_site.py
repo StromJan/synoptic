@@ -123,8 +123,8 @@ def render_SurfaceTemperaturePressure(frame, stamp, fc_step):
     # set up the styles
     t2m_style = ekp.styles.Style(
             units="celsius",
-            colors="RdBu_r",
-            levels=np.arange(-40,41,2),
+            colors="cmc.vik",
+            levels=np.arange(-40,41,5),
             )
     
     msl_style = ekp.styles.Contour(
@@ -166,7 +166,7 @@ def render_ReTop(frame, stamp, fc_step):
     gphDiff_style = ekp.styles.Style(
             colors="batlowW",
             extend="both", 
-            levels=np.arange(4400, 6010, 40),
+            levels=np.arange(5000, 6010, 80),
             )
     
     gph500_style = ekp.styles.Contour(
@@ -220,7 +220,7 @@ def render_Frontogenesis(frame, stamp, fc_step):
     # set up the styles
     fgp_style = ekp.styles.Style(
             units="K/(1000kmh)",
-            colors="RdBu_r",
+            colors="cmc.vik",
             extend="both",
             levels=np.arange(-15, 15.1, 0.5),
             )
@@ -265,7 +265,7 @@ def render_EqPotTemperature(frame, stamp, fc_step):
             units="degC",
             colors="tokyo",
             extend="both",
-            levels=np.arange(-10, 81, 2),
+            levels=np.arange(-10, 81, 5),
             )
     
     msl_style = ekp.styles.Contour(
@@ -304,7 +304,7 @@ def render_Tcwv(frame, stamp, fc_step):
             units_label="kg/m2",
             colors="GnBu",
             extend="both",
-            levels=np.arange(0, 46, 1),
+            levels=np.arange(0, 51, 2),
             )
     
     msl_style = ekp.styles.Contour(
@@ -348,7 +348,7 @@ def render_JetDiagnose(frame, stamp, fc_step):
             units="m/s",
             colors="YlGn",
             extend="max", 
-            levels=np.arange(30,91,5),
+            levels=np.arange(30,76,5),
             )
     
     msl_style = ekp.styles.Contour(
