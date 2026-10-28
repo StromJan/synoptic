@@ -1,8 +1,15 @@
+"""Download the IFS fields the maps need, plus the ECMWF meteogram.
+
+    python Retrieve_ECMWF_OpenData.py            # newest complete 00/12 UTC run
+    IFS_RUN=2026102800 python Retrieve_ECMWF_OpenData.py   # a specific run
+    python Retrieve_ECMWF_OpenData.py --latest   # only print the newest run, e.g. 2026102800
+"""
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 import os
+import sys
 
-import eccodes
 import requests
 from ecmwf.opendata import Client
 
@@ -73,6 +80,8 @@ def retrieve_file(run, request, target, expected):
     client.retrieve(date=run, stream="oper", type="fc", step=STEPS,
                     target=str(tmp), **request)
 
+    import eccodes                      # imported here so --latest works without eccodes
+
     with open(tmp, "rb") as f:
         n = eccodes.codes_count_in_file(f)
     if n != expected:
@@ -132,7 +141,14 @@ def fetch_meteogram(base_time):
 
 
 if __name__ == "__main__":
-    run = latest_run()
+    if "--latest" in sys.argv:              # used by the GitHub workflow's check job
+        print(f"{latest_run():%Y%m%d%H}")
+        sys.exit()
+
+    if os.environ.get("IFS_RUN"):           # the run the check job found
+        run = datetime.strptime(os.environ["IFS_RUN"], "%Y%m%d%H")
+    else:
+        run = latest_run()
     print(f"Using IFS run {run:%Y-%m-%d %H} UTC")
     download_forecast(run)
     try:                                    # a missing meteogram shouldn't stop the site build

@@ -2,12 +2,15 @@ name: Synoptic overview
 
 on:
   schedule:
-    # UTC. Twice a day, after the 00 and 12 UTC runs are complete to +168 h.
-    # Retrieve_ECMWF_OpenData.py always picks the newest complete run, so the
-    # exact time only affects how fresh the site is.
-    - cron: "23 9,21 * * *"
-  workflow_dispatch:          # "Run workflow" button in the Actions tab
-  push:
+    # UTC. A quick check (~30 s) for a new IFS run; the full build only runs
+    # when the newest complete 00/12 UTC run differs from the one on the site.
+    # Every 10 min in the windows when new runs appear (00 UTC run in the
+    # morning, 12 UTC run in the evening) ...
+    - cron: "3-59/10 5-11,17-23 * * *"
+    # ... and every 2 hours otherwise, as a safety net if a run is late.
+    - cron: "41 0-4/2,12-16/2 * * *"
+  workflow_dispatch:          # "Run workflow" button: always rebuilds
+  push:                       # changes to the scripts: always rebuild
     branches: [main]
     paths: ["Scripts/**", "requirements.txt", ".github/workflows/pages.yml"]
 
@@ -16,12 +19,58 @@ permissions:
   pages: write
   id-token: write
 
+# One run at a time. A check that starts while a build is running waits for it,
+# then sees the new run.txt on the site and skips.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      run: ${{ steps.latest.outputs.run }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ECMWF open-data client only
+        run: pip install "$(grep -i '^ecmwf-opendata' requirements.txt)"
+
+      - name: Find the newest complete IFS run
+        id: latest
+        working-directory: Scripts
+        run: |
+          run=$(python Retrieve_ECMWF_OpenData.py --latest)
+          [[ "$run" =~ ^[0-9]{10}$ ]] || { echo "Unexpected output: $run"; exit 1; }
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+      - name: Compare with the run on the live site
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.latest.outputs.run }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          site=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url 2>/dev/null || true)
+          live=$(curl -fsS "${site%/}/img/run.txt?nocache=$(date +%s)" 2>/dev/null || echo none)
+          echo "Newest IFS run: $LATEST   on the site: $live   trigger: $EVENT"
+          if [[ "$EVENT" != "schedule" || "$LATEST" != "$live" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "### Site is up to date (IFS run $live), nothing to build" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -43,6 +92,8 @@ jobs:
 
       - name: Download IFS forecast, DWD charts and meteogram
         working-directory: Scripts
+        env:
+          IFS_RUN: ${{ needs.check.outputs.run }}   # exactly the run the check found
         run: bash Retrieve_Forecast.bash
 
       - name: Render maps and build the page

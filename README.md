@@ -16,6 +16,13 @@ requirements.txt               packages for the GitHub build
 .github/workflows/pages.yml    schedule: download -> build -> publish
 ```
 
+## When it updates
+
+A quick check runs every 10 min during 05–12 and 17–24 UTC (every 2 h otherwise).
+It compares the newest IFS run that is complete to +168 h with `img/run.txt` on
+the live site, and only rebuilds when they differ. Pushing changes to `Scripts/`
+or pressing **Run workflow** always rebuilds.
+
 ## Build locally
 
 ```bash
