@@ -1,15 +1,21 @@
 name: Synoptic overview
 
+# Every run starts with a quick check (~30 s) for a new IFS run. The full build
+# only runs when the newest complete 00/12 UTC run differs from the one on the
+# site, or when forced.
+#
+# Main trigger: an external scheduler (cron-job.org, a crontab, ...) calls
+# workflow_dispatch with force=false every 10 min. GitHub's own schedule is
+# often delayed or skipped, so it is only a backup here.
 on:
   schedule:
-    # UTC. A quick check (~30 s) for a new IFS run; the full build only runs
-    # when the newest complete 00/12 UTC run differs from the one on the site.
-    # Every 10 min in the windows when new runs appear (00 UTC run in the
-    # morning, 12 UTC run in the evening) ...
-    - cron: "3-59/10 5-11,17-23 * * *"
-    # ... and every 2 hours otherwise, as a safety net if a run is late.
-    - cron: "41 0-4/2,12-16/2 * * *"
-  workflow_dispatch:          # "Run workflow" button: always rebuilds
+    - cron: "41 */2 * * *"    # backup, every 2 h (UTC)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild even if the site already has the newest IFS run"
+        type: boolean
+        default: true         # the "Run workflow" button rebuilds; the scheduler sends false
   push:                       # changes to the scripts: always rebuild
     branches: [main]
     paths: ["Scripts/**", "requirements.txt", ".github/workflows/pages.yml"]
@@ -57,11 +63,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LATEST: ${{ steps.latest.outputs.run }}
           EVENT: ${{ github.event_name }}
+          FORCE: ${{ inputs.force }}          # empty for schedule and push
         run: |
           site=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url 2>/dev/null || true)
           live=$(curl -fsS "${site%/}/img/run.txt?nocache=$(date +%s)" 2>/dev/null || echo none)
-          echo "Newest IFS run: $LATEST   on the site: $live   trigger: $EVENT"
-          if [[ "$EVENT" != "schedule" || "$LATEST" != "$live" ]]; then
+          echo "Newest IFS run: $LATEST   on the site: $live   trigger: $EVENT   force: ${FORCE:-n/a}"
+          if [[ "$EVENT" == "push" || "$FORCE" == "true" || "$LATEST" != "$live" ]]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
           else
             echo "build=false" >> "$GITHUB_OUTPUT"
