@@ -8,8 +8,6 @@ name: Synoptic overview
 # workflow_dispatch with force=false every 10 min. GitHub's own schedule is
 # often delayed or skipped, so it is only a backup here.
 on:
-  schedule:
-    - cron: "41 */2 * * *"    # backup, every 2 h (UTC)
   workflow_dispatch:
     inputs:
       force:
