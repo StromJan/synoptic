@@ -124,6 +124,7 @@ def render_SurfaceTemperaturePressure(frame, stamp, fc_step):
     t2m_style = ekp.styles.Style(
             units="celsius",
             colors="cmc.vik",
+            extend="both", 
             levels=np.arange(-40,41,5),
             )
     
